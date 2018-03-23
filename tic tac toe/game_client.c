@@ -111,7 +111,7 @@ void get_update(int sockfd, char board[][3]) {
 
 
 int main(int argc, char const *argv[]) {
-  int sockfd = connect_to_server("localhost", PORT)
+  int sockfd = connect_to_server("localhost", PORT);
 
   char msg[4];
   char board[3][3] = { {' ', ' ', ' '}, /* Game board */
