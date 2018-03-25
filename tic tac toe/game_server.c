@@ -168,6 +168,7 @@ void rungame(int cli_sockfd, int player_id, int sem[], char board[][3]) {
   while (!game_over) {
     int valid = 0;
     int move = 0;
+    printf("Waiting for player %d on sem %d\n",player_id+1, player_id );
     WAIT(sem[player_id]);
 
     send_board( cli_sockfd, board);
@@ -212,10 +213,19 @@ void rungame(int cli_sockfd, int player_id, int sem[], char board[][3]) {
         }
     }
     turn_count++;
+    printf("Signaling... for player %d on sem %d\n",player_id+1, !player_id );
     SIGNAL(sem[!player_id]);
 }
 }
 
+void reset_board(char board[][3]) {
+  for (size_t i = 0; i < 3; i++) {
+    for (size_t j = 0; j < 3; j++) {
+      board[i][j] = ' ';
+    }
+  }
+  board[3][0] = 0;
+}
 
 int main(int argc, char *argv[]) {
 
@@ -232,18 +242,13 @@ int main(int argc, char *argv[]) {
   // char (*board)[3];
   int shmid = shmget(IPC_PRIVATE, 12*sizeof(char), 0777|IPC_CREAT);
   char (*board)[3] = shmat(shmid, 0, 0);
-  for (size_t i = 0; i < 3; i++) {
-    for (size_t j = 0; j < 3; j++) {
-      board[i][j] = ' ';
-    }
-  }
-  board[3][0] = 0;
-printf("Done till here\n");
-printf("Board: %d\n", board[3][0]);
+
 
 
 
   while (1) {
+    reset_board(board);
+    printf("Waiing for Player 1\n");
     int player_1 = accept(server_sockfd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
 
     if (player_1 < 0)
@@ -275,9 +280,9 @@ printf("Board: %d\n", board[3][0]);
         close(player_2);
     }
 
-    shmdt(board);
-    shmctl(shmid, IPC_RMID, 0);
-  }
 
+  }
+  shmdt(board);
+  shmctl(shmid, IPC_RMID, 0);
   return 0;
 }
