@@ -164,13 +164,18 @@ void rungame(int cli_sockfd, int player_id, int sem[], char board[][3]) {
 
   int game_over = 0;
   int turn_count = 0;
+  int looser = 0;
   while (!game_over) {
     int valid = 0;
     int move = 0;
     WAIT(sem[player_id]);
+
+    send_board( cli_sockfd, board);
+    if (board[3][0] == 1)
+      game_over = 2, valid = 1;
     while (!valid) {
 
-      move = getPlayerMove(cli_sockfd);
+        move = getPlayerMove(cli_sockfd);
       if (move == -1)
         break;
 
@@ -186,6 +191,8 @@ void rungame(int cli_sockfd, int player_id, int sem[], char board[][3]) {
     if (move == -1) { /* Error reading from client. */
           printf("Player disconnected.\n");
           break;
+    } else if(game_over == 2) {
+      write_client_msg(cli_sockfd, "LSE");
     } else {
       update_board(board, move, player_id);
       send_board( cli_sockfd, board);
@@ -194,6 +201,7 @@ void rungame(int cli_sockfd, int player_id, int sem[], char board[][3]) {
        game_over = check_board(board, move);
 
         if (game_over == 1) { /* We have a winner. */
+            board[3][0] = 1;
             write_client_msg(cli_sockfd, "WIN");
             printf("Player %d won.\n", player_id+1);
         }
@@ -208,17 +216,6 @@ void rungame(int cli_sockfd, int player_id, int sem[], char board[][3]) {
 }
 }
 
-int create_board(char board[][3]) {
-  int shmid = shmget(IPC_PRIVATE, 9*sizeof(char), 0777|IPC_CREAT);
-  char (*b)[3] = shmat(shmid, 0, 0);
-  board = b;
-  for (size_t i = 0; i < 3; i++) {
-    for (size_t j = 0; j < 3; j++) {
-      board[i][j] = ' ';
-    }
-  }
-  return shmid;
-}
 
 int main(int argc, char *argv[]) {
 
@@ -233,15 +230,16 @@ int main(int argc, char *argv[]) {
   semctl(sem[1],0,SETVAL,1);
 
   // char (*board)[3];
-  int shmid = shmget(IPC_PRIVATE, 9*sizeof(char), 0777|IPC_CREAT);
+  int shmid = shmget(IPC_PRIVATE, 12*sizeof(char), 0777|IPC_CREAT);
   char (*board)[3] = shmat(shmid, 0, 0);
   for (size_t i = 0; i < 3; i++) {
     for (size_t j = 0; j < 3; j++) {
       board[i][j] = ' ';
     }
   }
+  board[3][0] = 0;
 printf("Done till here\n");
-printf("Board: %c\n", board[0][0]);
+printf("Board: %d\n", board[3][0]);
 
 
 
