@@ -8,7 +8,7 @@
 #include <netinet/in.h>
 #include <netdb.h>
 
-#define PORT 6000
+#define PORT 6001
 
 void error(const char *msg) {
     perror(msg);
@@ -108,7 +108,12 @@ void get_update(int sockfd, char board[][3]) {
     board[move/3][move%3] = player_id ? 'X' : 'O';
 }
 
-
+void get_board(int sockfd, char board[][3]) {
+  int n = read(sockfd, board, sizeof(char)*9);
+  printf("N: %d\n", n);
+  if (n < 0 || n != 9*sizeof(char))
+      error("ERROR reading int from server socket");
+}
 
 int main(int argc, char const *argv[]) {
   int sockfd = connect_to_server("localhost", PORT);
@@ -127,8 +132,10 @@ int main(int argc, char const *argv[]) {
     } else if (!strcmp(msg, "INV")) {
       printf("That position has already been played. Try again.\n");
     } else if (!strcmp(msg, "UPD")) { /* Server is sending a game board update. */
-            get_update(sockfd, board);
+            get_board(sockfd, board);
             draw_board(board);
+    } else if(!strcmp(msg, "BRD")) {
+            get_board(sockfd, board);
     } else if (!strcmp(msg, "WAT")) { /* Wait for other player to take a turn. */
             printf("Waiting for other players move...\n");
     } else if (!strcmp(msg, "WIN")) { /* Winner. */

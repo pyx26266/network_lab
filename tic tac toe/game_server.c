@@ -12,7 +12,7 @@
 
 #define WAIT(s)  semop(s,&pop,1)
 #define SIGNAL(s)  semop(s,&vop,1)
-#define PORT 6000
+#define PORT 6001
 #define BUFF_SIZE 256
 
 void error(const char *msg) {
@@ -60,9 +60,10 @@ void write_clients_int(int * cli_sockfd, int msg) {
 int setupListener(int portno) {
     int sockfd;
     struct sockaddr_in serv_addr;
-
+    int option = 1;
     /* Get a socket to listen on */
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option));
     if (sockfd < 0)
         error("ERROR opening listener socket.");
 
@@ -111,6 +112,14 @@ void draw_board(char board[][3]) {
     printf(" %c | %c | %c \n", board[2][0], board[2][1], board[2][2]);
 }
 
+void send_board(int cli_sockfd, char board[][3]) {
+  write_client_msg(cli_sockfd, "UPD");
+  int n = write(cli_sockfd, board, 9*sizeof(char));
+  if (n < 0)
+      error("ERROR writing int to client socket");
+
+}
+
 void send_update(int cli_sockfd, int move, int player_id) {
     /* Signal an update */
     write_client_msg(cli_sockfd, "UPD");
@@ -143,21 +152,7 @@ int check_board(char board[][3], int last_move) {
     /* No winner, yet. */
     return 0;
 }
-
-
-
-int main(int argc, char *argv[]) {
-
-  int server_sockfd = setupListener(PORT);
-  struct sockaddr_in address;
-  int addrlen = sizeof(address);
-
-  int sem1 = semget(IPC_PRIVATE,1,0777|IPC_CREAT);
-  int sem2 = semget(IPC_PRIVATE,1,0777|IPC_CREAT);
-
-  semctl(sem1,0,SETVAL,0);
-  semctl(sem2,0,SETVAL,1);
-
+void rungame(int cli_sockfd, int player_id, int sem[], char board[][3]) {
   struct sembuf pop,vop;
 
   pop.sem_num=0;
@@ -167,15 +162,87 @@ int main(int argc, char *argv[]) {
   pop.sem_op=-1;
   vop.sem_op=1;
 
+  int game_over = 0;
+  int turn_count = 0;
+  while (!game_over) {
+    int valid = 0;
+    int move = 0;
+    WAIT(sem[player_id]);
+    while (!valid) {
 
+      move = getPlayerMove(cli_sockfd);
+      if (move == -1)
+        break;
+
+      printf("Player %d played position %d\n", player_id+1, move);
+
+      valid = check_move(board, move, player_id);
+
+      if (!valid) { /* Move was invalid. */
+          printf("Move was invalid. Let's try this again...\n");
+          write_client_msg(cli_sockfd, "INV");
+      }
+    }
+    if (move == -1) { /* Error reading from client. */
+          printf("Player disconnected.\n");
+          break;
+    } else {
+      update_board(board, move, player_id);
+      send_board( cli_sockfd, board);
+       draw_board(board);
+
+       game_over = check_board(board, move);
+
+        if (game_over == 1) { /* We have a winner. */
+            write_client_msg(cli_sockfd, "WIN");
+            printf("Player %d won.\n", player_id+1);
+        }
+        else if (turn_count == 8) { /* There have been nine valid moves and no winner, game is a draw. */
+            printf("Draw.\n");
+            write_client_msg(cli_sockfd, "DRW");
+            game_over = 1;
+        }
+    }
+    turn_count++;
+    SIGNAL(sem[!player_id]);
+}
+}
+
+int create_board(char board[][3]) {
   int shmid = shmget(IPC_PRIVATE, 9*sizeof(char), 0777|IPC_CREAT);
-  char (*board)[3] = shmat(shmid, 0, 0);
-
+  char (*b)[3] = shmat(shmid, 0, 0);
+  board = b;
   for (size_t i = 0; i < 3; i++) {
     for (size_t j = 0; j < 3; j++) {
       board[i][j] = ' ';
     }
   }
+  return shmid;
+}
+
+int main(int argc, char *argv[]) {
+
+  int server_sockfd = setupListener(PORT);
+  struct sockaddr_in address;
+  int addrlen = sizeof(address);
+  int sem[2];
+  sem[0] = semget(IPC_PRIVATE,1,0777|IPC_CREAT);
+  sem[1] = semget(IPC_PRIVATE,1,0777|IPC_CREAT);
+
+  semctl(sem[0],0,SETVAL,0);
+  semctl(sem[1],0,SETVAL,1);
+
+  // char (*board)[3];
+  int shmid = shmget(IPC_PRIVATE, 9*sizeof(char), 0777|IPC_CREAT);
+  char (*board)[3] = shmat(shmid, 0, 0);
+  for (size_t i = 0; i < 3; i++) {
+    for (size_t j = 0; j < 3; j++) {
+      board[i][j] = ' ';
+    }
+  }
+printf("Done till here\n");
+printf("Board: %c\n", board[0][0]);
+
 
 
   while (1) {
@@ -193,50 +260,9 @@ int main(int argc, char *argv[]) {
       if (1) {
         printf("Waiting for player2...\n");
       }
-      int game_over = 0;
-      int turn_count = 0;
-      while (!game_over) {
-        int valid = 0;
-        int move = 0;
-        WAIT(sem1);
-        while (!valid) {
 
-          move = getPlayerMove(player_1);
-          if (move == -1)
-            break;
+      rungame(player_1, 0, sem, board);
 
-          printf("Player 1 played position %d\n", move);
-
-          valid = check_move(board, move, 0);
-
-          if (!valid) { /* Move was invalid. */
-              printf("Move was invalid. Let's try this again...\n");
-              write_client_msg(player_1, "INV");
-          }
-        }
-        if (move == -1) { /* Error reading from client. */
-              printf("Player disconnected.\n");
-              break;
-        } else {
-          update_board(board, move, 0);
-          send_update( player_1, move, 0);
-           draw_board(board);
-
-           game_over = check_board(board, move);
-
-            if (game_over == 1) { /* We have a winner. */
-                write_client_msg(player_1, "WIN");
-                printf("Player %d won.\n", 1);
-            }
-            else if (turn_count == 8) { /* There have been nine valid moves and no winner, game is a draw. */
-                printf("Draw.\n");
-                write_client_msg(player_1, "DRW");
-                game_over = 1;
-            }
-        }
-        turn_count++;
-        SIGNAL(sem2);
-      }
       printf("Game Over!\n");
       close(player_1);
       exit(0);
@@ -246,50 +272,7 @@ int main(int argc, char *argv[]) {
         if (player_2 < 0)
           error("Player2 Accept Error");
         printf("Player2 connected at port: %d\n", ntohs(address.sin_port));
-        int game_over = 0;
-        int turn_count = 0;
-        while (!game_over) {
-          int valid = 0;
-          int move = 0;
-          WAIT(sem2);
-          while (!valid) {
-
-            move = getPlayerMove(player_2);
-            if (move == -1)
-              break;
-
-            printf("Player 1 played position %d\n", move);
-
-            valid = check_move(board, move, 1);
-
-            if (!valid) { /* Move was invalid. */
-                printf("Move was invalid. Let's try this again...\n");
-                write_client_msg(player_2, "INV");
-            }
-          }
-          if (move == -1) { /* Error reading from client. */
-                printf("Player disconnected.\n");
-                break;
-          } else {
-            update_board(board, move, 1);
-            send_update( player_2, move, 1);
-             draw_board(board);
-
-             game_over = check_board(board, move);
-
-              if (game_over == 1) { /* We have a winner. */
-                  write_client_msg(player_2, "WIN");
-                  printf("Player %d won.\n", 2);
-              }
-              else if (turn_count == 8) { /* There have been nine valid moves and no winner, game is a draw. */
-                  printf("Draw.\n");
-                  write_client_msg(player_2, "DRW");
-                  game_over = 1;
-              }
-          }
-          turn_count++;
-          SIGNAL(sem1);
-        }
+        rungame(player_2, 1, sem, board);
         printf("Game Over!\n");
         close(player_2);
     }
