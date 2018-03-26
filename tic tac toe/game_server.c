@@ -1,3 +1,16 @@
+/****************************************************************************
+*       Simple Tic Tac Toe Game server built using shared 
+*       memory and semaphores for synchronisation of multiple
+*       processes.
+*
+*       Usage : ./server.out <any port number>
+*       
+*       GROUP NO :  17
+*       Roll no 15/CS/16 : Amit Sharma.
+*       Roll no 15/CS/19 : Aman Kumar Sah.
+*
+*****************************************************************************/
+
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
@@ -12,7 +25,6 @@
 
 #define WAIT(s)  semop(s,&pop,1)
 #define SIGNAL(s)  semop(s,&vop,1)
-#define PORT 6001
 #define BUFF_SIZE 256
 
 void error(const char *msg) {
@@ -21,7 +33,7 @@ void error(const char *msg) {
 }
 
 /* Reads an int from a client socket. */
-int recv_int(int cli_sockfd) {
+int recvInt(int cli_sockfd) {
     int msg = 0;
     int n = read(cli_sockfd, &msg, sizeof(int));
 
@@ -32,29 +44,29 @@ int recv_int(int cli_sockfd) {
 }
 
 /* Writes a message to a client socket. */
-void write_client_msg(int cli_sockfd, char * msg) {
+void writeClientMsg(int cli_sockfd, char * msg) {
     int n = write(cli_sockfd, msg, strlen(msg));
     if (n < 0)
         error("ERROR writing msg to client socket");
 }
 
 /* Writes an int to a client socket. */
-void write_client_int(int cli_sockfd, int msg) {
+void writeClientInt(int cli_sockfd, int msg) {
     int n = write(cli_sockfd, &msg, sizeof(int));
     if (n < 0)
         error("ERROR writing int to client socket");
 }
 
 /* Writes a message to both client sockets. */
-void write_clients_msg(int *cli_sockfd, char * msg) {
-    write_client_msg(cli_sockfd[0], msg);
-    write_client_msg(cli_sockfd[1], msg);
+void writeClientsMsg(int *cli_sockfd, char * msg) {
+    writeClientMsg(cli_sockfd[0], msg);
+    writeClientMsg(cli_sockfd[1], msg);
 }
 
 /* Writes an int to both client sockets. */
-void write_clients_int(int * cli_sockfd, int msg) {
-    write_client_int(cli_sockfd[0], msg);
-    write_client_int(cli_sockfd[1], msg);
+void writeClientsInt(int * cli_sockfd, int msg) {
+    writeClientInt(cli_sockfd[0], msg);
+    writeClientInt(cli_sockfd[1], msg);
 }
 
 int setupListener(int portno) {
@@ -87,24 +99,24 @@ int setupListener(int portno) {
 
 int getPlayerMove(int cli_sockfd) {
     /* Tell player to make a move. */
-    write_client_msg(cli_sockfd, "TRN");
+    writeClientMsg(cli_sockfd, "TRN");
 
     /* Get players move. */
-    return recv_int(cli_sockfd);
+    return recvInt(cli_sockfd);
 }
 
-int check_move(char board[][3], int move, int player_id) {
+int checkMove(char board[][3], int move, int player_id) {
     if ((move == 9) || (board[move/3][move%3] == ' '))   /* Move is valid. */
         return 1;
    else /* Move is invalid. */
        return 0;
 }
 
-void update_board(char board[][3], int move, int player_id) {
+void updateBoard(char board[][3], int move, int player_id) {
     board[move/3][move%3] = player_id ? 'X' : 'O';
 }
 
-void draw_board(char board[][3]) {
+void drawBoard(char board[][3]) {
     printf(" %c | %c | %c \n", board[0][0], board[0][1], board[0][2]);
     printf("-----------\n");
     printf(" %c | %c | %c \n", board[1][0], board[1][1], board[1][2]);
@@ -112,26 +124,26 @@ void draw_board(char board[][3]) {
     printf(" %c | %c | %c \n", board[2][0], board[2][1], board[2][2]);
 }
 
-void send_board(int cli_sockfd, char board[][3]) {
-  write_client_msg(cli_sockfd, "UPD");
+void sendBoard(int cli_sockfd, char board[][3]) {
+  writeClientMsg(cli_sockfd, "UPD");
   int n = write(cli_sockfd, board, 9*sizeof(char));
   if (n < 0)
       error("ERROR writing int to client socket");
 
 }
 
-void send_update(int cli_sockfd, int move, int player_id) {
+void sendUpdate(int cli_sockfd, int move, int player_id) {
     /* Signal an update */
-    write_client_msg(cli_sockfd, "UPD");
+    writeClientMsg(cli_sockfd, "UPD");
 
     /* Send the id of the player that made the move. */
-    write_client_int(cli_sockfd, player_id);
+    writeClientInt(cli_sockfd, player_id);
 
     /* Send the move. */
-    write_client_int(cli_sockfd, move);
+    writeClientInt(cli_sockfd, move);
 }
 
-int check_board(char board[][3], int last_move) {
+int checkBoard(char board[][3], int last_move) {
     int row = last_move/3;
     int col = last_move%3;
 
@@ -152,15 +164,16 @@ int check_board(char board[][3], int last_move) {
     /* No winner, yet. */
     return 0;
 }
-void rungame(int cli_sockfd, int player_id, int sem[], char board[][3]) {
-  struct sembuf pop,vop;
+void runGame(int cli_sockfd, int player_id, int sem[], char board[][3]) {
+  struct sembuf pop = {0, 0, -1},
+                vop = {0, 0, 1};
 
-  pop.sem_num=0;
-  vop.sem_num=0;
-  pop.sem_flg=0;
-  vop.sem_flg=0;
-  pop.sem_op=-1;
-  vop.sem_op=1;
+//   pop.sem_num=0;
+//   vop.sem_num=0;
+//   pop.sem_flg=0;
+//   vop.sem_flg=0;
+//   pop.sem_op=-1;
+//   vop.sem_op=1;
 
   int game_over = 0;
   int turn_count = 0;
@@ -170,7 +183,7 @@ void rungame(int cli_sockfd, int player_id, int sem[], char board[][3]) {
     int move = 0;
     WAIT(sem[player_id]);
 
-    send_board(cli_sockfd, board);
+    sendBoard(cli_sockfd, board);
     if (board[3][0] == 1)
       game_over = 2, valid = 1;
     else if(board[3][0] == 2)
@@ -183,33 +196,33 @@ void rungame(int cli_sockfd, int player_id, int sem[], char board[][3]) {
 
       printf("Player %d played position %d\n", player_id+1, move);
 
-      valid = check_move(board, move, player_id);
+      valid = checkMove(board, move, player_id);
 
       if (!valid) { /* Move was invalid. */
           printf("Move was invalid. Let's try this again...\n");
-          write_client_msg(cli_sockfd, "INV");
+          writeClientMsg(cli_sockfd, "INV");
       }
     }
     if (move == -1) { /* Error reading from client. */
           printf("Player disconnected.\n");
           break;
     } else if(game_over == 2) {
-      write_client_msg(cli_sockfd, "LSE");
+      writeClientMsg(cli_sockfd, "LSE");
     } else if (turn_count == 4) { /* There have been nine valid moves and no winner, game is a draw. */
         printf("Draw.\n");
-        write_client_msg(cli_sockfd, "DRW");
+        writeClientMsg(cli_sockfd, "DRW");
         board[3][0] = 2;
         game_over = 1;
     } else {
-      update_board(board, move, player_id);
-      send_board( cli_sockfd, board);
-       draw_board(board);
+      updateBoard(board, move, player_id);
+      sendBoard( cli_sockfd, board);
+       drawBoard(board);
        printf("checking board player %d count %d\n", player_id+1, turn_count);
-       game_over = check_board(board, move);
+       game_over = checkBoard(board, move);
 
         if (game_over == 1) { /* We have a winner. */
             board[3][0] = 1;
-            write_client_msg(cli_sockfd, "WIN");
+            writeClientMsg(cli_sockfd, "WIN");
             printf("Player %d won.\n", player_id+1);
         }
 
@@ -219,7 +232,7 @@ void rungame(int cli_sockfd, int player_id, int sem[], char board[][3]) {
 }
 }
 
-void reset_board(char board[][3]) {
+void resetBoard(char board[][3]) {
   for (size_t i = 0; i < 3; i++) {
     for (size_t j = 0; j < 3; j++) {
       board[i][j] = ' ';
@@ -230,7 +243,11 @@ void reset_board(char board[][3]) {
 
 int main(int argc, char *argv[]) {
 
-  int server_sockfd = setupListener(PORT);
+  if(argc < 2) {
+      error("ERROR PORT required");
+  }
+
+  int server_sockfd = setupListener(strtol(argv[1], NULL, 10));
   struct sockaddr_in address;
   int addrlen = sizeof(address);
   int sem[2];
@@ -248,8 +265,8 @@ int main(int argc, char *argv[]) {
 
 
   while (1) {
-    reset_board(board);
-    printf("Waiing for Player 1\n");
+    resetBoard(board);
+    printf("Waiting for Player 1\n");
     int player_1 = accept(server_sockfd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
 
     if (player_1 < 0)
@@ -265,19 +282,19 @@ int main(int argc, char *argv[]) {
         printf("Waiting for player2...\n");
       }
 
-      rungame(player_1, 0, sem, board);
+      runGame(player_1, 0, sem, board);
 
       printf("Player 1 Game Over!\n");
       close(player_1);
       exit(0);
     } else {
-        reset_board(board);
+        resetBoard(board);
         int player_2 = accept(server_sockfd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
 
         if (player_2 < 0)
           error("Player2 Accept Error");
         printf("Player2 connected at port: %d\n", ntohs(address.sin_port));
-        rungame(player_2, 1, sem, board);
+        runGame(player_2, 1, sem, board);
         printf("Player 2 Game Over!\n");
         close(player_2);
     }
