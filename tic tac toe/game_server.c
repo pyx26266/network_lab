@@ -168,12 +168,13 @@ void rungame(int cli_sockfd, int player_id, int sem[], char board[][3]) {
   while (!game_over) {
     int valid = 0;
     int move = 0;
-    printf("Waiting for player %d on sem %d\n",player_id+1, player_id );
     WAIT(sem[player_id]);
 
-    send_board( cli_sockfd, board);
+    send_board(cli_sockfd, board);
     if (board[3][0] == 1)
       game_over = 2, valid = 1;
+    else if(board[3][0] == 2)
+      valid = 1, turn_count = 4;
     while (!valid) {
 
         move = getPlayerMove(cli_sockfd);
@@ -194,11 +195,16 @@ void rungame(int cli_sockfd, int player_id, int sem[], char board[][3]) {
           break;
     } else if(game_over == 2) {
       write_client_msg(cli_sockfd, "LSE");
+    } else if (turn_count == 4) { /* There have been nine valid moves and no winner, game is a draw. */
+        printf("Draw.\n");
+        write_client_msg(cli_sockfd, "DRW");
+        board[3][0] = 2;
+        game_over = 1;
     } else {
       update_board(board, move, player_id);
       send_board( cli_sockfd, board);
        draw_board(board);
-
+       printf("checking board player %d count %d\n", player_id+1, turn_count);
        game_over = check_board(board, move);
 
         if (game_over == 1) { /* We have a winner. */
@@ -206,14 +212,9 @@ void rungame(int cli_sockfd, int player_id, int sem[], char board[][3]) {
             write_client_msg(cli_sockfd, "WIN");
             printf("Player %d won.\n", player_id+1);
         }
-        else if (turn_count == 8) { /* There have been nine valid moves and no winner, game is a draw. */
-            printf("Draw.\n");
-            write_client_msg(cli_sockfd, "DRW");
-            game_over = 1;
-        }
+
     }
     turn_count++;
-    printf("Signaling... for player %d on sem %d\n",player_id+1, !player_id );
     SIGNAL(sem[!player_id]);
 }
 }
@@ -266,17 +267,18 @@ int main(int argc, char *argv[]) {
 
       rungame(player_1, 0, sem, board);
 
-      printf("Game Over!\n");
+      printf("Player 1 Game Over!\n");
       close(player_1);
       exit(0);
     } else {
+        reset_board(board);
         int player_2 = accept(server_sockfd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
 
         if (player_2 < 0)
           error("Player2 Accept Error");
         printf("Player2 connected at port: %d\n", ntohs(address.sin_port));
         rungame(player_2, 1, sem, board);
-        printf("Game Over!\n");
+        printf("Player 2 Game Over!\n");
         close(player_2);
     }
 
