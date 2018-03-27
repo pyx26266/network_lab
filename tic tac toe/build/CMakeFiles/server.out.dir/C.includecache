@@ -1,0 +1,32 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/aman/Documents/networkLab/github/tic tac toe/game_server.c
+stdio.h
+-
+string.h
+-
+sys/types.h
+-
+unistd.h
+-
+sys/socket.h
+-
+netinet/in.h
+-
+arpa/inet.h
+-
+stdlib.h
+-
+sys/ipc.h
+-
+sys/shm.h
+-
+sys/sem.h
+-
+

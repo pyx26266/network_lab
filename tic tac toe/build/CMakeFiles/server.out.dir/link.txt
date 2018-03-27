@@ -1,0 +1,1 @@
+/usr/bin/cc   -rdynamic CMakeFiles/server.out.dir/game_server.c.o  -o server.out 

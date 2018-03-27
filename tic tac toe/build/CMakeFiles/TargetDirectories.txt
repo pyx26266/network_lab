@@ -1,0 +1,4 @@
+/home/aman/Documents/networkLab/github/tic tac toe/build/CMakeFiles/rebuild_cache.dir
+/home/aman/Documents/networkLab/github/tic tac toe/build/CMakeFiles/server.out.dir
+/home/aman/Documents/networkLab/github/tic tac toe/build/CMakeFiles/edit_cache.dir
+/home/aman/Documents/networkLab/github/tic tac toe/build/CMakeFiles/client.out.dir
